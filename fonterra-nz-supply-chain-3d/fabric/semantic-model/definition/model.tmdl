@@ -1,0 +1,7 @@
+model Model
+	defaultMode: directQuery
+	culture: en-NZ
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	discourageImplicitMeasures
+
+ref table FactorySnapshotRows

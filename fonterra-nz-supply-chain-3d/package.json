@@ -1,0 +1,42 @@
+{
+  "name": "fonterra-nz-supply-chain-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "build:fabric": "tsc -b && vite build --mode fabric",
+    "preview": "vite preview --host 127.0.0.1",
+    "preview:fabric": "vite preview --mode fabric --host 127.0.0.1",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "test:browser:fabric": "playwright test --config playwright.fabric.config.ts"
+  },
+  "dependencies": {
+    "@microsoft/rayfin-auth": "1.35.0",
+    "@microsoft/rayfin-auth-provider-fabric": "1.35.0",
+    "@microsoft/rayfin-lib": "1.35.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "three": "^0.180.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.0",
+    "@types/node": "^22.18.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/three": "^0.180.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^26.1.0",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.0",
+    "vite-plugin-singlefile": "^2.3.0",
+    "vitest": "^3.2.0"
+  }
+}

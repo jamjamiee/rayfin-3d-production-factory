@@ -1,0 +1,16 @@
+// Applied by scripts/provision_streaming.py; one command per non-comment line.
+// Whole-envelope JSON: preserve unknown fields, nested lines, and fractional FX.
+// @schema
+.create-merge table FonterraSalesRaw (Payload:dynamic)
+// @mapping
+.create-or-alter table FonterraSalesRaw ingestion json mapping 'FonterraSalesRawJson' '[{"column":"Payload","datatype":"dynamic","Properties":{"Path":"$"}}]'
+// @new-table-policy -- apply ONLY when this deployment creates the raw table.
+.alter table FonterraSalesRaw policy ingestiontime true
+.alter table FonterraSalesRaw policy retention '{"SoftDeletePeriod":"7.00:00:00","Recoverability":"Enabled"}'
+.alter table FonterraSalesRaw policy caching hot = 1d
+// @function -- do not replace an unrelated existing function with the same name.
+.create-or-alter function with (folder='Fonterra', docstring='Deduplicated events by run and event ID; raw envelope retained') FonterraSalesEvents() { FonterraSalesRaw | extend EventId=tostring(Payload.EventId), SimulationRunId=tostring(Payload.SimulationRunId), EventTime=todatetime(Payload.EventTime), EventType=tostring(Payload.EventType), OrderKey=tostring(Payload.OrderKey), IngestedAt=ingestion_time() | where isnotempty(EventId) and isnotempty(SimulationRunId) | summarize arg_max(IngestedAt, *) by SimulationRunId, EventId }
+.create-or-alter function with (folder='Fonterra', docstring='Event-grain lines; sum LineSalesAmount only for SALE_COMPLETED; never sum snapshot totals') FonterraSalesLines() { FonterraSalesEvents() | mv-expand Line=Payload.lines | extend LineSalesAmount=toreal(Line.SalesAmount) }
+// @query
+// All lifecycle events retain their lines; filter SALE_COMPLETED to avoid counting order snapshots.
+FonterraSalesLines() | where EventTime > ago(1d) and EventType == 'SALE_COMPLETED' | summarize SalesAmount=sum(LineSalesAmount) by SimulationRunId

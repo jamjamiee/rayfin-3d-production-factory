@@ -1,5 +1,12 @@
 # Fonterra real-time sales notebook
 
+The [Fonterra NZ Supply Chain 3D app source](fonterra-nz-supply-chain-3d/README.md)
+is included in `fonterra-nz-supply-chain-3d/`. It contains the React/Three.js frontend,
+Fabric data adapter, optional loopback Python API, snapshot queries and tests.
+Its local environment files, dependencies, built bundles and deployment credentials
+are not published. The running app and data remain hosted in Microsoft Fabric;
+publishing source does not grant access to those services.
+
 [**FonterraSalesEmulator.ipynb**](notebooks/FonterraSalesEmulator.ipynb) is a self-contained
 Microsoft Fabric notebook for `rayfin-3d-production-factory`. It extends the concept of the
 [Retail Sales Jumpstart](https://jumpstart.fabric.microsoft.com/catalog/retail-sales/) with
@@ -270,5 +277,6 @@ python -m unittest discover -s .\tests -v
 ```
 
 Core tests need only Python's standard library. Live publishing requires
-`requirements-streaming.txt`. The repository contains no workspace IDs, secrets or
-automatic infrastructure provisioning.
+`requirements-streaming.txt`. The pipeline resolves workspace IDs dynamically.
+The app subfolder retains non-secret reference deployment URLs and resource IDs;
+it contains no credentials and does not automatically provision infrastructure.

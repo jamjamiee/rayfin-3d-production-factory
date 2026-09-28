@@ -1,0 +1,76 @@
+.create function with (folder='Fonterra/NewSupplyChainApp', docstring='Fonterra NZ Supply Chain 3D app v1') FonterraSupplyChainAppRows() {
+let BuildSnapshot = () {
+// Read-only snapshot for the NEW Fonterra NZ Supply Chain 3D app.
+// This does not modify the existing Rayfin app or any ingestion resources.
+// Production-line assignments are illustrative category groupings, not plant telemetry.
+let Current = materialize(
+    FonterraOrdersCurrent
+    | where EventTime > ago(24h) and IsNZSupermarketDelivery == true
+);
+let RecentOrders = materialize(Current | order by EventTime desc, OrderKey asc | take 200);
+let Orders = RecentOrders
+| project
+    id=strcat(SimulationRunId, "/", OrderKey), runId=tostring(SimulationRunId),
+    orderKey=tostring(OrderKey), eventId=tostring(EventId), sequence=EventSequence,
+    number=OrderNumber, status=OrderStatus, eventTime=EventTime, orderedAt=OrderDate,
+    dispatchedAt=DispatchDate, deliveredAt=DeliveryDate, expectedAt=ExpectedDeliveryDate,
+    brand=Brand, brandScope=BrandScopeId, portfolioStatus=PortfolioStatus,
+    chain=SupermarketChain, destinationId=DestinationId, destination=DestinationName,
+    city=DestinationCity, region=DestinationRegion, latitude=DestinationLatitude,
+    longitude=DestinationLongitude, isDispatched=IsDispatchedToNZSupermarket,
+    isLate=IsLate, netNZD=tostring(OrderNetAmountNZD), salesNZD=tostring(SalesAmountNZD);
+let Lines = FonterraOrderLinesUnique
+| where EventTime > ago(24h) and IsNZSupermarketDelivery == true
+| join kind=inner (RecentOrders | project SimulationRunId, EventId) on SimulationRunId, EventId
+| project
+    id=strcat(SimulationRunId, "/", OrderKey, "/", LineNumber),
+    orderId=strcat(SimulationRunId, "/", OrderKey), eventId=tostring(EventId),
+    number=LineNumber, productCode=ProductCode, product=ProductName,
+    category=CategoryName, brand=Brand, portfolioStatus=PortfolioStatus,
+    quantity=Quantity, unit=QuantityUnit, pack=PackSize, storage=StorageCondition,
+    batchId=BatchId, status=OrderStatus, netNZD=tostring(LineNetAmountNZD),
+    productionLine=case(
+        CategoryName in ("Cheese", "Artisan cheese"), "cheese",
+        CategoryName in ("Greek-style yoghurt", "Fruit yoghurt"), "cultured",
+        CategoryName in ("Butter", "Cream", "Dairy fats"), "butter",
+        "dairy");
+let Activity = FonterraOrderEventsUnique
+| where EventTime > ago(24h) and IsNZSupermarketDelivery == true
+| order by EventTime desc, EventSequence desc
+| take 40
+| project id=tostring(EventId), orderId=strcat(SimulationRunId, "/", OrderKey),
+    orderNumber=OrderNumber, eventType=EventType, eventTime=EventTime,
+    brand=Brand, chain=SupermarketChain, city=DestinationCity;
+let Totals = Current
+| summarize totalOrders=count(),
+    awaitingDispatch=countif(OrderStatus == "Received"),
+    inTransit=countif(OrderStatus == "Dispatched"),
+    delivered=countif(OrderStatus in ("Delivered", "Sold")),
+    cancelled=countif(OrderStatus == "Cancelled"),
+    lateOrders=countif(IsLate), salesNZD=tostring(sum(SalesAmountNZD)),
+    lastEventAt=max(EventTime);
+print Snapshot=bag_pack(
+    "generatedAt", now(),
+    "windowHours", 24,
+    "maxOrders", 200,
+    "scope", "NZ supermarket deliveries",
+    "productionSource", "Illustrative category assignments; no manufacturing telemetry is recorded.",
+    "orders", toscalar(Orders | summarize make_list(pack_all(), 200)),
+    "lines", toscalar(Lines | summarize make_list(pack_all(), 600)),
+    "activity", toscalar(Activity | summarize make_list(pack_all(), 40)),
+    "totals", toscalar(Totals | summarize take_any(pack_all()))
+)
+
+};
+let Data = materialize(BuildSnapshot() | extend SnapshotId=tostring(new_guid()));
+let Metadata = Data
+| project Kind="meta", RowKey="meta",
+    PayloadJson=tostring(bag_set_key(bag_remove_keys(Snapshot, dynamic(["orders", "lines", "activity"])), "__rowCounts", bag_pack("orders", array_length(Snapshot.orders), "lines", array_length(Snapshot.lines), "activity", array_length(Snapshot.activity)))), SnapshotId;
+let Orders = Data | mv-expand Record=Snapshot.orders
+| project Kind="order", RowKey=strcat("order:", tostring(Record.id)), PayloadJson=tostring(Record), SnapshotId;
+let Lines = Data | mv-expand Record=Snapshot.lines
+| project Kind="line", RowKey=strcat("line:", tostring(Record.id)), PayloadJson=tostring(Record), SnapshotId;
+let Activity = Data | mv-expand Record=Snapshot.activity
+| project Kind="activity", RowKey=strcat("activity:", tostring(Record.id)), PayloadJson=tostring(Record), SnapshotId;
+union Metadata, Orders, Lines, Activity
+}

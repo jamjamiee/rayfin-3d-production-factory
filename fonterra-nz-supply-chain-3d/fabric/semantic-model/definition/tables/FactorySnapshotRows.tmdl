@@ -1,0 +1,30 @@
+/// Atomic read-only app snapshots, one small JSON object per row.
+table FactorySnapshotRows
+
+	column Kind
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Kind
+
+	column RowKey
+		dataType: string
+		summarizeBy: none
+		sourceColumn: RowKey
+
+	column PayloadJson
+		dataType: string
+		summarizeBy: none
+		sourceColumn: PayloadJson
+
+	column SnapshotId
+		dataType: string
+		sourceColumn: SnapshotId
+		summarizeBy: none
+
+	partition FactorySnapshotRows = m
+		mode: directQuery
+		source =
+				let
+					Source = AzureDataExplorer.Contents("https://trd-5j8yuxw060hwqdjzah.z8.kusto.fabric.microsoft.com", "7dc2da2b-776e-485b-88fe-beb05e5a9d9c", "FonterraSupplyChainAppRows()", [])
+				in
+					Source

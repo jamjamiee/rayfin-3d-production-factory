@@ -1,0 +1,56 @@
+// Run each query independently in the FonterraSales KQL database.
+// Sales: deduplicate at event/line grain, then count completed sales only.
+FonterraOrderLinesUnique
+| where EventTime > ago(1d) and EventType == "SALE_COMPLETED"
+| summarize SalesNZD=sum(SalesAmountNZD), Orders=count_distinct(OrderKey)
+    by Brand, BrandScopeId, PortfolioStatus, CategoryName
+| order by SalesNZD desc
+
+// Current order state: higher lifecycle sequence wins even if delivery is out of order.
+FonterraOrdersCurrent
+| where EventTime > ago(1d)
+| project OrderKey, OrderNumber, OrderStatus, Brand, Channel,
+    OrderDate, DispatchDate, DeliveryDate, IsLate, CurrencyCode, OrderNetAmount
+| order by OrderDate desc
+
+// Incoming orders, including subsequently cancelled orders.
+FonterraOrderEventsUnique
+| where EventTime > ago(1d) and EventType == "ORDER_RECEIVED"
+| summarize Orders=count(), OrderedValue=sum(OrderNetAmount)
+    by bin(EventTime, 5m), CurrencyCode, BrandScopeId
+
+// Dispatch units: keep product, pack size, and selling unit in the grouping.
+FonterraOrderLinesUnique
+| where EventTime > ago(1d) and EventType == "ORDER_DISPATCHED"
+| summarize UnitsDispatched=sum(DispatchedQuantityDelta)
+    by ProductCode, ProductName, PackSize, QuantityUnit, WarehouseId
+
+// Data quality: don't hide incomplete messages or infrastructure probes.
+FonterraSalesRejected
+| where ProcessedAt > ago(1d)
+| summarize Rejected=count() by ValidationError
+
+// Inspect typed product lines without repeated order-level totals.
+FonterraOrderLinesUnique
+| where EventTime > ago(1h)
+| project EventTime, EventType, OrderKey, LineNumber, Brand, CategoryName,
+    ProductCode, Quantity, QuantityUnit, CurrencyCode, NetPrice,
+    LineNetAmount, SalesAmount, SalesAmountNZD
+| take 100
+
+// Actual NZ supermarket dispatches, not planned orders or repeated delivered/sold snapshots.
+// Chain names and outlet destinations are illustrative; retain the ownership label.
+FonterraOrderLinesUnique
+| where EventTime > ago(1d)
+| where EventType == "ORDER_DISPATCHED" and IsDispatchedToNZSupermarket == true
+| summarize UnitsDispatched=sum(DispatchedQuantityDelta), Orders=count_distinct(OrderKey)
+    by SupermarketChain, DestinationId, DestinationName, DestinationCity, DestinationRegion,
+       ProductCode, ProductName, PackSize, QuantityUnit, BrandScopeId, PortfolioStatus
+
+// Current NZ supermarket order status: planned destination versus actual dispatch.
+FonterraOrdersCurrent
+| where EventTime > ago(1d) and IsNZSupermarketDelivery == true
+| project OrderNumber, Brand, PortfolioStatus, SupermarketChain, DestinationName,
+    DestinationCity, DestinationRegion, OrderStatus, IsDispatchedToNZSupermarket,
+    OrderDate, DispatchDate, DeliveryDate, IsLate
+| order by OrderDate desc
